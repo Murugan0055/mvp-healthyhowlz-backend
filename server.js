@@ -42,6 +42,10 @@ app.use('/api/auth', authRoutes);
 // Meal Routes
 app.use('/api/meals', mealRoutes);
 
+const dietPlanRoutes = require('./routes/dietPlanRoutes');
+app.use('/api/clients', dietPlanRoutes);
+
+
 
 // Workout Routes
 app.get('/api/workouts', async (req, res) => {
