@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Increased limit for image uploads
+app.use('/uploads', express.static('uploads'));
 
 const { pool } = require('./db');
 const authRoutes = require('./routes/authRoutes');
@@ -48,6 +49,14 @@ app.use('/api/clients', dietPlanRoutes);
 
 
 // Workout Routes
+const workoutPlanRoutes = require('./routes/workoutPlanRoutes');
+const workoutSessionRoutes = require('./routes/workoutSessionRoutes');
+
+app.use('/api/clients', workoutPlanRoutes);
+app.use('/api/workout-sessions', workoutSessionRoutes);
+
+// Legacy Workout Routes (Manual Logging)
+
 app.get('/api/workouts', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM workout_logs ORDER BY created_at DESC');
