@@ -1,4 +1,4 @@
-const { pool, modelNames } = require('../db');
+const { pool, model } = require('../db');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const dotenv = require('dotenv');
 
@@ -15,13 +15,21 @@ exports.analyzeMeal = async (req, res) => {
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
 
     // Use Gemini Pro Vision for image analysis
-    const model = genAI.getGenerativeModel({ model: modelNames[0] });
+    const generativeModel = genAI.getGenerativeModel({ model: model });
 
-    const prompt = `Analyze this food image. Identify the meal type (Breakfast, Lunch, Dinner, Snack), list the foods detected, estimate total calories, and estimate macros (protein, carbs, fat in grams). 
-    Return ONLY a JSON object with this format:
+    const prompt = `Analyze this food image.
+    1. Identify the meal type (Breakfast, Lunch, Dinner, Snack).
+    2. Identify specific food items (e.g., 'Hariyali Chicken', 'Paneer Butter Masala').
+    3. Estimate the quantity for EACH item (e.g., '100g', '1 cup', '2 pieces').
+    4. Calculate total calories and macros (protein, carbs, fat) based on these quantities.
+
+    IMPORTANT: The 'foods_detected' array MUST contain strings in the format "Food Name (Quantity)".
+    Example: ["Steamed Rice (150g)", "Dal Tadka (1 bowl)", "Chicken Curry (200g)"]
+
+    Return ONLY a JSON object:
     {
       "meal_type": "string",
-      "foods_detected": ["string"],
+      "foods_detected": ["string"], 
       "calories_est": number,
       "macros": { "protein": number, "carbs": number, "fat": number }
     }`;
@@ -33,13 +41,14 @@ exports.analyzeMeal = async (req, res) => {
       },
     };
 
-    const result = await model.generateContent([prompt, imagePart]);
+    const result = await generativeModel.generateContent([prompt, imagePart]);
     const response = await result.response;
     const text = response.text();
-
+    console.log('text', text);
     // Clean up markdown code blocks if present to ensure valid JSON
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const data = JSON.parse(jsonStr);
+    console.log('data', data);
 
     res.json(data);
   } catch (err) {

@@ -9,6 +9,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+let model = 'gemini-2.5-flash';
 const modelNames = [
   'gemini-2.5-flash',       // fast, good price-performance
   'gemini-2.5-flash-lite',  // even lighter, for high volume
@@ -43,14 +44,15 @@ const testAIConnection = async () => {
 
     for (const modelName of modelNames) {
       try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent("Hello");
+        const modelObj = genAI.getGenerativeModel({ model: modelName });
+        const result = await modelObj.generateContent("Hello");
         const response = await result.response;
         const text = response.text();
 
         if (text) {
           console.log(`✅ AI Model '${modelName}' is working!`);
           console.log(`   Response: ${text.substring(0, 50)}...`);
+          model = modelName;
           break; // Found a working model
         }
       } catch (error) {
@@ -65,5 +67,5 @@ const testAIConnection = async () => {
 // Run AI test after a short delay to let the server start
 setTimeout(testAIConnection, 1000);
 
-module.exports = { pool, modelNames };
+module.exports = { pool, model };
 
