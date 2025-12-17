@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const workoutPlanController = require('../controllers/workoutPlanController');
-const authMiddleware = require('../middleware/authMiddleware');
+const { authMiddleware } = require('../middleware/authMiddleware');
 
 // Protect all routes
 router.use(authMiddleware);

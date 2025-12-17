@@ -16,7 +16,8 @@ const authMiddleware = (req, res, next) => {
 
     // Attach user info to request object
     req.user = {
-      id: decoded.id
+      id: decoded.id,
+      role: decoded.role || 'client' // Default to client if role is missing in legacy tokens
     };
 
     next();
@@ -35,4 +36,16 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-module.exports = authMiddleware;
+// Role guards
+const requireRole = (roles) => (req, res, next) => {
+  if (!req.user || !roles.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Access forbidden: Insufficient permissions' });
+  }
+  next();
+};
+
+const requireClient = requireRole(['client']);
+const requireTrainer = requireRole(['trainer']);
+const requireGymOwner = requireRole(['gym_owner']);
+
+module.exports = { authMiddleware, requireClient, requireTrainer, requireGymOwner };
