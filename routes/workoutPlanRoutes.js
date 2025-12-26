@@ -10,5 +10,6 @@ router.use(authMiddleware);
 router.get('/:clientId/workout-plans/current', workoutPlanController.getCurrentWorkoutPlan);
 router.get('/:clientId/workout-plans/versions', workoutPlanController.getWorkoutPlanVersions);
 router.get('/:clientId/workout-plans/:workoutPlanVersionId', workoutPlanController.getWorkoutPlanById);
+router.post('/:clientId/workout-plans', workoutPlanController.createWorkoutPlan);
 
 module.exports = router;

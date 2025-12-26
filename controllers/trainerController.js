@@ -270,3 +270,132 @@ exports.markSessionComplete = async (req, res) => {
     res.status(500).json({ error: 'Failed to mark session complete' });
   }
 };
+// GET /trainer/clients/:clientId/workouts/history
+exports.getClientWorkoutsHistory = async (req, res) => {
+  try {
+    const trainerId = req.user.id;
+    const clientId = req.params.clientId;
+    const { from_date, to_date } = req.query;
+
+    if (!from_date || !to_date) {
+      return res.status(400).json({ error: 'Date range required' });
+    }
+
+    // Verify client belongs to trainer
+    const clientCheck = await pool.query(
+      'SELECT id FROM users WHERE id = $1 AND trainer_id = $2',
+      [clientId, trainerId]
+    );
+
+    if (clientCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not authorized' });
+    }
+
+    const query = `
+      WITH dates AS (
+        SELECT generate_series($2::date, $3::date, '1 day'::interval)::date AS date
+      )
+      SELECT 
+        d.date,
+        e.id, e.workout_plan_version_id, e.day_name, e.name, e.sets, e.reps, e.duration, e.notes, e.order_index,
+        CASE WHEN wc.id IS NOT NULL THEN true ELSE false END as is_completed,
+        wc.id as completion_id
+      FROM dates d
+      JOIN workout_plan_versions wpv ON wpv.client_id = $1 
+        AND wpv.followed_from <= d.date 
+        AND (wpv.followed_till IS NULL OR wpv.followed_till >= d.date)
+      JOIN workout_plan_exercises e ON e.workout_plan_version_id = wpv.id
+        AND e.day_name = trim(to_char(d.date, 'Day'))
+      LEFT JOIN workout_completions wc ON wc.workout_plan_exercise_id = e.id
+        AND wc.user_id = $1
+        AND wc.date = d.date
+      ORDER BY d.date DESC, e.order_index ASC
+    `;
+
+    const result = await pool.query(query, [clientId, from_date, to_date]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get client workouts history error:', err);
+    res.status(500).json({ error: 'Failed to fetch client workouts history' });
+  }
+};
+
+// POST /trainer/clients/:clientId/workouts/:id/complete
+exports.markClientWorkoutComplete = async (req, res) => {
+  try {
+    const trainerId = req.user.id;
+    const clientId = req.params.clientId;
+    const { id } = req.params; // exercise id
+    const { date } = req.body;
+    const file = req.file;
+
+    // Verify client belongs to trainer
+    const clientCheck = await pool.query(
+      'SELECT id FROM users WHERE id = $1 AND trainer_id = $2',
+      [clientId, trainerId]
+    );
+
+    if (clientCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not authorized' });
+    }
+
+    const exerciseRes = await pool.query(
+      'SELECT category FROM workout_plan_exercises WHERE id = $1',
+      [id]
+    );
+
+    if (exerciseRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Exercise not found' });
+    }
+
+    const { category } = exerciseRes.rows[0];
+    let photoUrl = null;
+    if (category === 'CARDIO' && file) {
+      photoUrl = `/uploads/${file.filename}`;
+    }
+
+    await pool.query(
+      `INSERT INTO workout_completions (user_id, workout_plan_exercise_id, date, machine_photo_url)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, workout_plan_exercise_id, date) 
+       DO UPDATE SET machine_photo_url = EXCLUDED.machine_photo_url, completed_at = CURRENT_TIMESTAMP`,
+      [clientId, id, date, photoUrl]
+    );
+
+    res.json({ success: true, photoUrl });
+  } catch (err) {
+    console.error('Mark client workout complete error:', err);
+    res.status(500).json({ error: 'Failed to mark client workout complete' });
+  }
+};
+
+// POST /trainer/clients/:clientId/workouts/:id/incomplete
+exports.markClientWorkoutIncomplete = async (req, res) => {
+  try {
+    const trainerId = req.user.id;
+    const clientId = req.params.clientId;
+    const { id } = req.params; // exercise id
+    const { date } = req.body;
+
+    // Verify client belongs to trainer
+    const clientCheck = await pool.query(
+      'SELECT id FROM users WHERE id = $1 AND trainer_id = $2',
+      [clientId, trainerId]
+    );
+
+    if (clientCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not authorized' });
+    }
+
+    await pool.query(
+      `DELETE FROM workout_completions
+       WHERE user_id = $1 AND workout_plan_exercise_id = $2 AND date = $3`,
+      [clientId, id, date]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Mark client workout incomplete error:', err);
+    res.status(500).json({ error: 'Failed to mark client workout incomplete' });
+  }
+};
