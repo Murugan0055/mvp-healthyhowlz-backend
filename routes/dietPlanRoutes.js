@@ -10,5 +10,6 @@ router.use(authMiddleware);
 router.get('/:clientId/diet-plans/current', dietPlanController.getCurrentDietPlan);
 router.get('/:clientId/diet-plans/versions', dietPlanController.getDietPlanVersions);
 router.get('/:clientId/diet-plans/:dietPlanVersionId', dietPlanController.getDietPlanById);
+router.post('/:clientId/diet-plans', dietPlanController.createDietPlan);
 
 module.exports = router;

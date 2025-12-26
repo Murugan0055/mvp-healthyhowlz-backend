@@ -48,4 +48,4 @@ const requireClient = requireRole(['client']);
 const requireTrainer = requireRole(['trainer']);
 const requireGymOwner = requireRole(['gym_owner']);
 
-module.exports = { authMiddleware, requireClient, requireTrainer, requireGymOwner };
+module.exports = { authMiddleware, requireRole, requireClient, requireTrainer, requireGymOwner };

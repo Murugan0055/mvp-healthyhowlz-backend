@@ -2,7 +2,12 @@ CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   email VARCHAR(255) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  role VARCHAR(20) NOT NULL DEFAULT 'client',
+  trainer_id INTEGER REFERENCES users(id),
+  sessions_remaining INTEGER DEFAULT 0,
+  validity_expires_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT users_role_check CHECK (role IN ('client', 'trainer', 'gym_owner'))
 );
 
 CREATE TABLE meal_logs (

@@ -100,8 +100,85 @@ const getDietPlanById = async (req, res) => {
   }
 };
 
+// Create a new diet plan version
+const createDietPlan = async (req, res) => {
+  const { clientId } = req.params;
+  const { title, description, meals, isActive } = req.body;
+  const trainerId = req.user.id;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. If isActive is true, deactivate current active plan
+    if (isActive) {
+      await client.query(
+        `UPDATE diet_plan_versions 
+         SET followed_till = CURRENT_DATE, updated_at = NOW()
+         WHERE client_id = $1 AND followed_till IS NULL`,
+        [clientId]
+      );
+    }
+
+    // 2. Create new version
+    const followedFrom = new Date().toISOString().split('T')[0];
+    const followedTill = isActive ? null : followedFrom; // If not active, mark it as "finished" immediately
+
+    const versionResult = await client.query(
+      `INSERT INTO diet_plan_versions (client_id, created_by_trainer_id, title, description, followed_from, followed_till)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [clientId, trainerId, title, description, followedFrom, followedTill]
+    );
+
+    const newVersion = versionResult.rows[0];
+
+    // 3. Insert meals
+    if (meals && meals.length > 0) {
+      const mealQueries = meals.map((meal, index) => {
+        return client.query(
+          `INSERT INTO diet_plan_meals (diet_plan_version_id, meal_type, name, description, protein_g, carbs_g, fat_g, calories_kcal, order_index)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            newVersion.id,
+            meal.meal_type,
+            meal.name,
+            meal.description,
+            meal.protein_g || 0,
+            meal.carbs_g || 0,
+            meal.fat_g || 0,
+            meal.calories_kcal || 0,
+            index
+          ]
+        );
+      });
+      await Promise.all(mealQueries);
+    }
+
+    await client.query('COMMIT');
+
+    // Fetch the complete plan to return
+    const mealsResult = await pool.query(
+      `SELECT * FROM diet_plan_meals WHERE diet_plan_version_id = $1 ORDER BY order_index ASC`,
+      [newVersion.id]
+    );
+
+    res.status(201).json({
+      ...newVersion,
+      meals: mealsResult.rows
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error creating diet plan:', err);
+    res.status(500).json({ error: 'Failed to create diet plan' });
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getCurrentDietPlan,
   getDietPlanVersions,
-  getDietPlanById
+  getDietPlanById,
+  createDietPlan
 };
