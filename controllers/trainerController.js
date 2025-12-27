@@ -109,6 +109,10 @@ exports.getClientDetails = async (req, res) => {
     const trainerId = req.user.id;
     const clientId = req.params.clientId;
 
+    if (!clientId || clientId === 'undefined' || isNaN(parseInt(clientId))) {
+      return res.status(400).json({ error: 'Invalid client ID' });
+    }
+
     // Verify client belongs to trainer
     const clientCheck = await pool.query(
       'SELECT id FROM users WHERE id = $1 AND trainer_id = $2',
@@ -141,6 +145,10 @@ exports.getClientMeals = async (req, res) => {
     const trainerId = req.user.id;
     const clientId = req.params.clientId;
     const { from_date, to_date } = req.query;
+
+    if (!clientId || clientId === 'undefined' || isNaN(parseInt(clientId))) {
+      return res.status(400).json({ error: 'Invalid client ID' });
+    }
 
     // Verify client belongs to trainer
     const clientCheck = await pool.query(
@@ -181,6 +189,10 @@ exports.getClientWorkouts = async (req, res) => {
     const trainerId = req.user.id;
     const clientId = req.params.clientId;
     const { date } = req.query;
+
+    if (!clientId || clientId === 'undefined' || isNaN(parseInt(clientId))) {
+      return res.status(400).json({ error: 'Invalid client ID' });
+    }
 
     // Verify client belongs to trainer
     const clientCheck = await pool.query(
@@ -241,6 +253,10 @@ exports.markSessionComplete = async (req, res) => {
   try {
     const trainerId = req.user.id;
     const clientId = req.params.clientId;
+
+    if (!clientId || clientId === 'undefined' || isNaN(parseInt(clientId))) {
+      return res.status(400).json({ error: 'Invalid client ID' });
+    }
 
     // Verify client belongs to trainer
     const clientCheck = await pool.query(

@@ -4,6 +4,10 @@ const { pool } = require('../db');
 const getCurrentDietPlan = async (req, res) => {
   const clientId = req.params.clientId === 'me' ? req.user.id : req.params.clientId;
 
+  if (!clientId || clientId === 'undefined' || (req.params.clientId !== 'me' && isNaN(parseInt(clientId)))) {
+    return res.status(400).json({ error: 'Invalid client ID' });
+  }
+
   try {
     // 1. Get the active version
     const versionResult = await pool.query(
@@ -43,6 +47,10 @@ const getCurrentDietPlan = async (req, res) => {
 // Get all diet plan versions for a client
 const getDietPlanVersions = async (req, res) => {
   const clientId = req.params.clientId === 'me' ? req.user.id : req.params.clientId;
+
+  if (!clientId || clientId === 'undefined' || (req.params.clientId !== 'me' && isNaN(parseInt(clientId)))) {
+    return res.status(400).json({ error: 'Invalid client ID' });
+  }
 
   try {
     const result = await pool.query(
@@ -144,10 +152,10 @@ const createDietPlan = async (req, res) => {
             meal.meal_type,
             meal.name,
             meal.description,
-            meal.protein_g || 0,
-            meal.carbs_g || 0,
-            meal.fat_g || 0,
-            meal.calories_kcal || 0,
+            meal.protein_g ? Math.round(meal.protein_g * 100) / 100 : 0,
+            meal.carbs_g ? Math.round(meal.carbs_g * 100) / 100 : 0,
+            meal.fat_g ? Math.round(meal.fat_g * 100) / 100 : 0,
+            meal.calories_kcal ? Math.round(meal.calories_kcal * 100) / 100 : 0,
             index
           ]
         );

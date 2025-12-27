@@ -143,7 +143,14 @@ exports.createMeal = async (req, res) => {
       (user_id, date, time, meal_type, foods_detected, calories_est, protein, carbs, fat, notes, image_url)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *`,
-      [userId, date, time, meal_type, foods_detected, calories_est, protein, carbs, fat, notes, image_url]
+      [
+        userId, date, time, meal_type, foods_detected,
+        calories_est ? Math.round(calories_est * 100) / 100 : 0,
+        protein ? Math.round(protein * 100) / 100 : 0,
+        carbs ? Math.round(carbs * 100) / 100 : 0,
+        fat ? Math.round(fat * 100) / 100 : 0,
+        notes, image_url
+      ]
     );
 
     res.json(result.rows[0]);

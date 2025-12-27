@@ -9,7 +9,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-let model = 'gemini-2.5-flash';
+let model = 'gemini-2.5-flash-lite';
 const modelNames = [
   'gemini-2.5-flash',       // fast, good price-performance
   'gemini-2.5-flash-lite',  // even lighter, for high volume

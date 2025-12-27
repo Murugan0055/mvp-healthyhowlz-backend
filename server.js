@@ -60,7 +60,12 @@ app.use('/api/workout-sessions', workoutSessionRoutes);
 app.use('/api/me', profileRoutes);
 
 const trainerRoutes = require('./routes/trainerRoutes');
+const templateRoutes = require('./routes/templateRoutes');
+const aiRoutes = require('./routes/aiRoutes');
+
 app.use('/api/trainer', trainerRoutes);
+app.use('/api/templates', templateRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Legacy Workout Routes (Manual Logging)
 

@@ -4,6 +4,10 @@ const { pool } = require('../db');
 const getCurrentWorkoutPlan = async (req, res) => {
   const clientId = req.params.clientId === 'me' ? req.user.id : req.params.clientId;
 
+  if (!clientId || clientId === 'undefined' || (req.params.clientId !== 'me' && isNaN(parseInt(clientId)))) {
+    return res.status(400).json({ error: 'Invalid client ID' });
+  }
+
   try {
     // 1. Get the active version
     const versionResult = await pool.query(
@@ -42,6 +46,10 @@ const getCurrentWorkoutPlan = async (req, res) => {
 // Get all workout plan versions for a client
 const getWorkoutPlanVersions = async (req, res) => {
   const clientId = req.params.clientId === 'me' ? req.user.id : req.params.clientId;
+
+  if (!clientId || clientId === 'undefined' || (req.params.clientId !== 'me' && isNaN(parseInt(clientId)))) {
+    return res.status(400).json({ error: 'Invalid client ID' });
+  }
 
   try {
     const result = await pool.query(
