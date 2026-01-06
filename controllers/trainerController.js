@@ -415,3 +415,195 @@ exports.markClientWorkoutIncomplete = async (req, res) => {
     res.status(500).json({ error: 'Failed to mark client workout incomplete' });
   }
 };
+// GET /trainer/dashboard/stats
+exports.getDashboardStats = async (req, res) => {
+  try {
+    const trainerId = req.user.id;
+
+    // 1. Total Active Clients
+    const activeClientsRes = await pool.query(
+      `SELECT COUNT(*) FROM users 
+       WHERE trainer_id = $1 AND role = 'client'
+       AND (total_sessions - completed_sessions) > 0 
+       AND (validity_expires_at IS NULL OR validity_expires_at > NOW())`,
+      [trainerId]
+    );
+
+    // 2. Sessions Today
+    const sessionsTodayRes = await pool.query(
+      `SELECT COUNT(*) FROM trainer_sessions 
+       WHERE trainer_id = $1 AND session_date = CURRENT_DATE AND status != 'cancelled'`,
+      [trainerId]
+    );
+
+    // 3. Pending Plans (clients without active workout/diet plan)
+    // This is a bit complex, let's just get count of clients for now
+
+    // 4. Recent Activity (latest workout completions by clients)
+    const recentActivityRes = await pool.query(
+      `SELECT wc.completed_at, u.name as client_name, e.name as exercise_name, 'workout' as type
+       FROM workout_completions wc
+       JOIN users u ON wc.user_id = u.id
+       JOIN workout_plan_exercises e ON wc.workout_plan_exercise_id = e.id
+       WHERE u.trainer_id = $1
+       ORDER BY wc.completed_at DESC
+       LIMIT 5`,
+      [trainerId]
+    );
+
+    // 5. Client Growth (count of new clients in last 30 days)
+    const clientGrowthRes = await pool.query(
+      `SELECT COUNT(*) FROM users 
+       WHERE trainer_id = $1 AND role = 'client' AND created_at > NOW() - INTERVAL '30 days'`,
+      [trainerId]
+    );
+
+    res.json({
+      activeClients: parseInt(activeClientsRes.rows[0].count),
+      sessionsToday: parseInt(sessionsTodayRes.rows[0].count),
+      recentActivity: recentActivityRes.rows,
+      clientGrowth: parseInt(clientGrowthRes.rows[0].count)
+    });
+  } catch (err) {
+    console.error('Get dashboard stats error:', err);
+    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
+};
+
+// GET /trainer/sessions
+exports.getSessions = async (req, res) => {
+  try {
+    const trainerId = req.user.id;
+    const { start_date, end_date } = req.query;
+
+    let query = `
+      SELECT ts.*, u.name as client_name, u.profile_image_url as client_image
+      FROM trainer_sessions ts
+      JOIN users u ON ts.client_id = u.id
+      WHERE ts.trainer_id = $1
+    `;
+    const params = [trainerId];
+
+    if (start_date && end_date) {
+      query += ` AND ts.session_date BETWEEN $2 AND $3`;
+      params.push(start_date, end_date);
+    }
+
+    query += ` ORDER BY ts.session_date ASC, ts.start_time ASC`;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get sessions error:', err);
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+};
+
+// POST /trainer/sessions
+exports.createSession = async (req, res) => {
+  try {
+    const trainerId = req.user.id;
+    const sessionsData = Array.isArray(req.body) ? req.body : [req.body];
+
+    const results = [];
+    for (const session of sessionsData) {
+      const { client_id, session_date, start_time, end_time, notes } = session;
+      const result = await pool.query(
+        `INSERT INTO trainer_sessions (trainer_id, client_id, session_date, start_time, end_time, notes)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [trainerId, client_id, session_date, start_time, end_time, notes]
+      );
+      results.push(result.rows[0]);
+    }
+
+    res.status(201).json(Array.isArray(req.body) ? results : results[0]);
+  } catch (err) {
+    console.error('Create session error:', err);
+    res.status(500).json({ error: 'Failed to create session' });
+  }
+};
+
+// PATCH /trainer/sessions/:sessionId
+exports.updateSession = async (req, res) => {
+  try {
+    const trainerId = req.user.id;
+    const { sessionId } = req.params;
+    const { session_date, start_time, end_time, status, notes } = req.body;
+
+    const result = await pool.query(
+      `UPDATE trainer_sessions 
+       SET session_date = COALESCE($1, session_date),
+           start_time = COALESCE($2, start_time),
+           end_time = COALESCE($3, end_time),
+           status = COALESCE($4, status),
+           notes = COALESCE($5, notes),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6 AND trainer_id = $7
+       RETURNING *`,
+      [session_date, start_time, end_time, status, notes, sessionId, trainerId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Update session error:', err);
+    res.status(500).json({ error: 'Failed to update session' });
+  }
+};
+
+// DELETE /trainer/sessions/:sessionId
+exports.deleteSession = async (req, res) => {
+  try {
+    const trainerId = req.user.id;
+    const { sessionId } = req.params;
+
+    const result = await pool.query(
+      'DELETE FROM trainer_sessions WHERE id = $1 AND trainer_id = $2 RETURNING id',
+      [sessionId, trainerId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    res.json({ message: 'Session deleted successfully' });
+  } catch (err) {
+    console.error('Delete session error:', err);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
+};
+
+// GET /trainer/clients/:clientId/progress
+exports.getClientProgress = async (req, res) => {
+  try {
+    const trainerId = req.user.id;
+    const { clientId } = req.params;
+
+    // Verify client belongs to trainer
+    const clientCheck = await pool.query(
+      'SELECT id FROM users WHERE id = $1 AND trainer_id = $2',
+      [clientId, trainerId]
+    );
+
+    if (clientCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Client not found or not authorized' });
+    }
+
+    const result = await pool.query(
+      `SELECT recorded_at, weight_kg, bmi, body_fat_percent 
+       FROM user_body_metrics 
+       WHERE user_id = $1 
+       ORDER BY recorded_at ASC`,
+      [clientId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get client progress error:', err);
+    res.status(500).json({ error: 'Failed to fetch client progress' });
+  }
+};

@@ -248,3 +248,120 @@ exports.getLatestBodyMeasurements = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch latest body measurements' });
   }
 };
+// GET /me/dashboard - consolidated dashboard data for client
+exports.getDashboardInfo = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = new Date().toISOString().split('T')[0];
+
+    // 1. Fetch Today's Calories and Macros
+    const dailyMealStatsRes = await pool.query(
+      `SELECT 
+        COALESCE(SUM(calories_est), 0) as calories,
+        COALESCE(SUM(protein), 0) as protein,
+        COALESCE(SUM(carbs), 0) as carbs,
+        COALESCE(SUM(fat), 0) as fat
+       FROM meal_logs 
+       WHERE user_id = $1 AND date = $2`,
+      [userId, today]
+    );
+
+    // 2. Fetch User Profile for Goals (like goal calories if exists or default)
+    const profileRes = await pool.query(
+      `SELECT goal, activity_level FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    // 3. Fetch Next Active Workout Plan
+    const nextWorkoutRes = await pool.query(
+      `SELECT wp.title, COUNT(wpe.id) as exercises_count
+       FROM workout_plan_versions wp
+       LEFT JOIN workout_plan_exercises wpe ON wp.id = wpe.workout_plan_version_id
+       WHERE wp.client_id = $1 AND wp.followed_till IS NULL
+       GROUP BY wp.id
+       LIMIT 1`,
+      [userId]
+    );
+
+    // 4. Fetch Upcoming Sessions with Trainer
+    const upcomingSessionsRes = await pool.query(
+      `SELECT ts.*, u.name as trainer_name
+       FROM trainer_sessions ts
+       JOIN users u ON ts.trainer_id = u.id
+       WHERE ts.client_id = $1 AND ts.session_date >= CURRENT_DATE AND ts.status = 'scheduled'
+       ORDER BY ts.session_date ASC, ts.start_time ASC
+       LIMIT 3`,
+      [userId]
+    );
+
+    // 5. Recent Activity (Latest meals and workouts)
+    const recentActivityRes = await pool.query(
+      `SELECT 'meal' as type, meal_type as title, calories_est as value, created_at, date
+       FROM meal_logs 
+       WHERE user_id = $1
+       UNION ALL
+       SELECT 'workout' as type, title, 0 as value, created_at, date
+       FROM workout_logs
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 5`,
+      [userId]
+    );
+
+    // 6. Latest weight progress (from metrics)
+    const weightRes = await pool.query(
+      `SELECT weight_kg, recorded_at 
+       FROM user_body_metrics 
+       WHERE user_id = $1 
+       ORDER BY recorded_at DESC, created_at DESC 
+       LIMIT 2`,
+      [userId]
+    );
+
+    res.json({
+      summary: {
+        calories: Math.round(dailyMealStatsRes.rows[0].calories),
+        protein: Math.round(dailyMealStatsRes.rows[0].protein),
+        carbs: Math.round(dailyMealStatsRes.rows[0].carbs),
+        fat: Math.round(dailyMealStatsRes.rows[0].fat),
+        goalCalories: 2200 // Mock for now, should calculate based on profile or settings
+      },
+      nextWorkout: nextWorkoutRes.rows[0] || null,
+      upcomingSessions: upcomingSessionsRes.rows,
+      recentActivity: recentActivityRes.rows,
+      weightProgress: weightRes.rows
+    });
+  } catch (err) {
+    console.error('Get dashboard info error:', err);
+    res.status(500).json({ error: 'Failed to fetch dashboard data' });
+  }
+};
+
+// GET /me/sessions - Get current user's trainer sessions
+exports.getSessions = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { start_date, end_date } = req.query;
+
+    let query = `
+      SELECT ts.*, u.name as trainer_name, u.profile_image_url as trainer_image
+      FROM trainer_sessions ts
+      JOIN users u ON ts.trainer_id = u.id
+      WHERE ts.client_id = $1
+    `;
+    const params = [userId];
+
+    if (start_date && end_date) {
+      query += ` AND ts.session_date BETWEEN $2 AND $3`;
+      params.push(start_date, end_date);
+    }
+
+    query += ` ORDER BY ts.session_date ASC, ts.start_time ASC`;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get client sessions error:', err);
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+};

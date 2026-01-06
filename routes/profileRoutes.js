@@ -20,4 +20,10 @@ router.get('/body-measurements', profileController.getBodyMeasurements);
 router.post('/body-measurements', profileController.createBodyMeasurements);
 router.get('/body-measurements/latest', profileController.getLatestBodyMeasurements);
 
+// Dashboard route
+router.get('/dashboard', profileController.getDashboardInfo);
+
+// Sessions route
+router.get('/sessions', profileController.getSessions);
+
 module.exports = router;
